@@ -4,7 +4,7 @@ defmodule DeutschWeb.MainLive do
 
   @impl true
   def mount(_, _session, socket) do
-    {:ok, socket |> assign(search: "")}
+    {:ok, socket |> assign(search: "", autocomplete: [])}
   end
 
   @impl true
@@ -18,6 +18,11 @@ defmodule DeutschWeb.MainLive do
 
   @impl true
   def handle_event("autocomplete", %{"search" => search}, socket) do
+    autocomplete(search)
     {:noreply, socket}
+  end
+
+  defp autocomplete(search) do
+    Req.get!("https://www.verben.de/suche/eingabe/?w=#{search}").body |> dbg
   end
 end
