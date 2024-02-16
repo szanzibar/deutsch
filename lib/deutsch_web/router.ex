@@ -17,7 +17,9 @@ defmodule DeutschWeb.Router do
   scope "/", DeutschWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live "/", MainLive
+
+    # get "/", PageController, :home
   end
 
   # Other scopes may use custom stacks.
