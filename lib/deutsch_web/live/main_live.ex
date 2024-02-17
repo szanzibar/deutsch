@@ -24,12 +24,68 @@ defmodule DeutschWeb.MainLive do
 
     <div>
       <div><%= @results[:word] %></div>
-      <div><%= @results[:translation] %></div>
+      <div><%= @results[:verb_case] %></div>
       <div><%= @results[:extra] %></div>
+      <div><%= @results[:translation] %></div>
       <div><%= @results[:d_sentence] %></div>
       <div><%= @results[:e_sentence] %></div>
     </div>
+
+    <.button :if={@results[:word]} phx-click="make_anki_card">Make anki card</.button>
     """
+  end
+
+  @impl true
+  def handle_event("make_anki_card", _, socket) do
+    deck_name = "every day German"
+    model_name = "Basic (and reversed card)"
+    results = socket.assigns.results
+
+    line2 =
+      if results[:verb_case] == "",
+        do: results[:extra],
+        else: "#{results[:verb_case]}</p><p>#{results[:extra]}"
+
+    front = "<p>#{results[:word]}</p><p>#{line2}</p><p>#{results[:d_sentence]}</p>"
+    back = "<p>#{results[:translation]}</p><p>#{results[:e_sentence]}</p>"
+
+    request = %{
+      "action" => "addNote",
+      "version" => 6,
+      "params" => %{
+        "note" => %{
+          "deckName" => deck_name,
+          "modelName" => model_name,
+          "fields" => %{
+            "Front" => front,
+            "Back" => back
+          },
+          "options" => %{
+            "allowDuplicate" => false,
+            "duplicateScope" => "deck",
+            "duplicateScopeOptions" => %{
+              "deckName" => deck_name,
+              "checkChildren" => false,
+              "checkAllModels" => false
+            }
+          },
+          "tags" => [
+            "auto-added"
+          ]
+        }
+      }
+    }
+
+    socket =
+      Req.post!("http://localhost:8765", json: request)
+      |> case do
+        %{body: %{"error" => error}} when not is_nil(error) -> socket |> put_flash(:error, error)
+        _ -> socket |> put_flash(:info, "Card added")
+      end
+
+    Req.post!("http://localhost:8765", json: %{"action" => "sync", "version" => 6})
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -79,18 +135,27 @@ defmodule DeutschWeb.MainLive do
 
     translation =
       document
-      |> Floki.find("#wStckKrz > p:nth-last-child(2)")
+      |> Floki.find("#wStckKrz > p > span[lang='en']")
       |> Floki.text()
       |> trim
       |> IO.inspect()
 
     extra =
       document
-      |> Floki.find("#wStckKrz > p:nth-last-child(3)")
+      |> Floki.find("#wStckKrz > p")
+      |> Enum.find(fn element -> Floki.find(element, "q") != [] end)
       |> Floki.traverse_and_update(fn
         {"i", [], [word]} -> {"i", [], ["#{word} "]}
         result -> IO.inspect(result)
       end)
+      |> Floki.text()
+      |> trim
+      |> IO.inspect()
+
+    verb_case =
+      document
+      |> Floki.find("#wStckKrz > p")
+      |> Enum.find(fn element -> Floki.find(element, "span[title]") != [] end)
       |> Floki.text()
       |> trim
       |> IO.inspect()
@@ -102,7 +167,6 @@ defmodule DeutschWeb.MainLive do
     {d_sentence, e_sentence} =
       sentences
       |> Enum.filter(fn element -> Floki.find(element, "li >  span ") != [] end)
-      |> IO.inspect()
       |> case do
         [] when sentences == [] ->
           # No sentence found at all
@@ -110,30 +174,75 @@ defmodule DeutschWeb.MainLive do
 
         [] ->
           # No english sentence
-          {sentences |> Enum.random() |> Floki.text() |> trim |> IO.inspect(), ""}
+          {sentences |> Enum.random() |> Floki.text() |> trim, ""}
 
         filtered_sentences ->
-          sentence = filtered_sentences |> List.last()
+          sentence = filtered_sentences |> Enum.random()
 
           deutsch_sentence =
-            Floki.filter_out(sentence, "li > span") |> Floki.text() |> trim |> IO.inspect()
+            Floki.filter_out(sentence, "li > span") |> Floki.text() |> trim
 
           english_sentence =
-            Floki.find(sentence, "li > span") |> Floki.text() |> trim |> IO.inspect()
+            Floki.find(sentence, "li > span") |> Floki.text() |> trim
 
           {deutsch_sentence, english_sentence}
       end
 
-    %{
+    results = %{
       word: word,
-      translation: translation,
       extra: extra,
+      verb_case: verb_case,
+      translation: translation,
       d_sentence: d_sentence,
       e_sentence: e_sentence
     }
+
+    if d_sentence == "" || e_sentence == "" do
+      {d_sentence, e_sentence} = find_sentence(results)
+
+      if d_sentence != "" && e_sentence != "" do
+        %{results | d_sentence: d_sentence, e_sentence: e_sentence}
+      else
+        results
+      end
+    else
+      results
+    end
   end
 
   defp trim(string) do
     string |> String.trim()
+  end
+
+  defp find_sentence(results) do
+    word = results[:word] |> String.split(",") |> List.first()
+    extra_forms = results[:extra] |> String.split("·", trim: true)
+
+    all_forms =
+      [word | extra_forms]
+      |> Enum.map(fn word ->
+        word
+        |> String.replace(["(", ")"], "")
+        |> String.trim()
+      end)
+      |> Enum.join("\\W|")
+      |> IO.inspect()
+
+    {:ok, sentences} = File.read("sentence_pairs_german_english.tsv")
+
+    sentences
+    |> String.split("\n")
+    |> Enum.map(fn line -> String.split(line, "\t") end)
+    |> Enum.filter(fn [d, _e] ->
+      String.match?(d, ~r/#{all_forms}/)
+    end)
+    |> case do
+      [] ->
+        {"", ""}
+
+      list ->
+        [d, e] = Enum.random(list)
+        {d, e}
+    end
   end
 end
