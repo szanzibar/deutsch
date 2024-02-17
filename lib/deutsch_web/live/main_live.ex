@@ -95,25 +95,41 @@ defmodule DeutschWeb.MainLive do
       |> trim
       |> IO.inspect()
 
-    sentence =
+    sentences =
       document
       |> Floki.find("section:nth-last-child(1) > div > ul > li")
+
+    {d_sentence, e_sentence} =
+      sentences
       |> Enum.filter(fn element -> Floki.find(element, "li >  span ") != [] end)
       |> IO.inspect()
-      |> List.last()
+      |> case do
+        [] when sentences == [] ->
+          # No sentence found at all
+          {"", ""}
 
-    deutsch_sentence =
-      Floki.filter_out(sentence, "li > span") |> Floki.text() |> trim |> IO.inspect()
+        [] ->
+          # No english sentence
+          {sentences |> Enum.random() |> Floki.text() |> trim |> IO.inspect(), ""}
 
-    english_sentence =
-      Floki.find(sentence, "li > span") |> Floki.text() |> trim |> IO.inspect()
+        filtered_sentences ->
+          sentence = filtered_sentences |> List.last()
+
+          deutsch_sentence =
+            Floki.filter_out(sentence, "li > span") |> Floki.text() |> trim |> IO.inspect()
+
+          english_sentence =
+            Floki.find(sentence, "li > span") |> Floki.text() |> trim |> IO.inspect()
+
+          {deutsch_sentence, english_sentence}
+      end
 
     %{
       word: word,
       translation: translation,
       extra: extra,
-      e_sentence: english_sentence,
-      d_sentence: deutsch_sentence
+      d_sentence: d_sentence,
+      e_sentence: e_sentence
     }
   end
 
