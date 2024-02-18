@@ -2,6 +2,11 @@ defmodule DeutschWeb.MainLive do
   @moduledoc false
   use DeutschWeb, :live_view
 
+  @headers [
+    user_agent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+  ]
+
   @impl true
   def mount(_, _session, socket) do
     {:ok, socket |> assign(search: "", options: [], results: %{})}
@@ -102,17 +107,12 @@ defmodule DeutschWeb.MainLive do
   @impl true
   def handle_event("submit", %{"word" => word}, socket) do
     dbg(word)
-    body = Req.get!("https://www.verben.de/?w=#{URI.encode(word)}").body
+    body = Req.get!("https://www.verben.de/?w=#{URI.encode(word)}", headers: @headers).body
     {:noreply, socket |> assign(search: "", options: [], results: parse_verben(body))}
   end
 
   defp autocomplete(search) do
-    Req.get!("https://www.verben.de/suche/eingabe/?w=#{URI.encode(search)}",
-      headers: [
-        user_agent:
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-      ]
-    ).body
+    Req.get!("https://www.verben.de/suche/eingabe/?w=#{URI.encode(search)}", headers: @headers).body
     |> Enum.reject(&Enum.empty?/1)
     |> dbg
     |> Enum.map(fn [option, html] ->
