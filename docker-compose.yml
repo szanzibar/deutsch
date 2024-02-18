@@ -7,3 +7,13 @@ services:
       - 3123:3000
       # Anki Connect port
       - 8765:8765
+  deutsch:
+    image: deutsch
+    user: 1000:1000
+    environment:
+      - SECRET_KEY_BASE=${SECRET_KEY_BASE}
+      - PHX_HOST=${PHX_HOST}
+    container_name: deutsch
+    restart: 'unless-stopped'
+    ports:
+      - 4123:4000
