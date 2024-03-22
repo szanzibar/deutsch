@@ -112,7 +112,7 @@ defmodule DeutschWeb.MainLive do
   end
 
   defp autocomplete(search) do
-    Req.get!("https://www.verben.de/suche/eingabe/?w=#{URI.encode(search)}", headers: @headers).body
+    Req.get!("https://www.verben.de/suche/i/?w=#{URI.encode(search)}", headers: @headers).body
     |> Enum.reject(&Enum.empty?/1)
     |> dbg
     |> Enum.map(fn [option, html] ->
